@@ -21,7 +21,9 @@ struct MetricGroup: Identifiable {
 private enum Palette {
     static let accent = Color(red: 0.93, green: 0.22, blue: 0.18)
     static let accentDeep = Color(red: 0.55, green: 0.09, blue: 0.08)
-    static let base = Color(red: 0.035, green: 0.04, blue: 0.055)
+    static let base = Color.black
+    static let display = "AvenirNext-DemiBold"
+    static let displayHeavy = "AvenirNext-Heavy"
 }
 
 private struct PressableStyle: ButtonStyle {
@@ -30,6 +32,29 @@ private struct PressableStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .brightness(configuration.isPressed ? -0.04 : 0)
             .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
+/// 卡片上斜向扫过的高光，仅一次动画循环，尊重系统「减弱动态效果」
+private struct SweepOverlay: View {
+    let delay: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = -0.75
+
+    var body: some View {
+        GeometryReader { geo in
+            LinearGradient(colors: [.clear, Color.white.opacity(0.085), .clear],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(width: geo.size.width * 0.5)
+                .rotationEffect(.degrees(16))
+                .offset(x: geo.size.width * phase)
+                .blendMode(.plusLighter)
+                .onAppear {
+                    guard !reduceMotion else { return }
+                    withAnimation(.linear(duration: 2.6).delay(delay)) { phase = 1.5 }
+                }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -64,7 +89,7 @@ struct ContentView: View {
                     hero
                     statusChip
                     ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                        card(for: group)
+                        card(for: group, index: index)
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 18)
                             .animation(.easeOut(duration: 0.55).delay(0.12 + Double(index) * 0.08),
@@ -134,17 +159,24 @@ struct ContentView: View {
             .opacity(appeared ? 1 : 0)
             .animation(.spring(response: 0.85, dampingFraction: 0.78), value: appeared)
 
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 Text("牛头")
-                    .font(.system(size: 36, weight: .black, design: .rounded))
+                    .font(.system(size: 40, weight: .heavy))
                     .foregroundStyle(
-                        LinearGradient(colors: [.white, Color.white.opacity(0.72)],
+                        LinearGradient(colors: [.white, Color(white: 0.68)],
                                        startPoint: .top, endPoint: .bottom)
                     )
+                    .shadow(color: .black.opacity(0.6), radius: 12, x: 0, y: 6)
 
-                Text("B U L L T R O L L")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.42))
+                Text("BULLTROLL")
+                    .font(.custom(Palette.display, size: 10.5))
+                    .foregroundStyle(Color.white.opacity(0.38))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                    )
             }
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 10)
@@ -178,11 +210,11 @@ struct ContentView: View {
 
     // MARK: 卡片
 
-    private func card(for group: MetricGroup) -> some View {
+    private func card(for group: MetricGroup, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(group.caption)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.38))
+                .font(.custom(Palette.display, size: 10))
+                .foregroundStyle(Color.white.opacity(0.34))
                 .padding(.horizontal, 18)
                 .padding(.top, 16)
                 .padding(.bottom, 10)
@@ -196,13 +228,14 @@ struct ContentView: View {
                         .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                     Text(metric.title)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13.5))
                         .foregroundStyle(Color.white.opacity(0.55))
 
                     Spacer(minLength: 8)
 
                     Text(metric.value)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13.5, weight: .medium))
+                        .monospacedDigit()
                         .foregroundStyle(Color.white.opacity(0.94))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -235,7 +268,11 @@ struct ContentView: View {
                     lineWidth: 1
                 )
         )
-        .shadow(color: .black.opacity(0.45), radius: 26, x: 0, y: 14)
+        .overlay(
+            SweepOverlay(delay: 0.4 + Double(index) * 0.5)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        )
+        .shadow(color: .black.opacity(0.55), radius: 26, x: 0, y: 14)
     }
 
     // MARK: 按钮
@@ -246,6 +283,7 @@ struct ContentView: View {
                 .flatMap { $0.metrics }
                 .map { "\($0.title)：\($0.value)" }
                 .joined(separator: "\n")
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.easeOut(duration: 0.2)) { copied = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                 withAnimation(.easeOut(duration: 0.25)) { copied = false }
@@ -255,7 +293,7 @@ struct ContentView: View {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 14, weight: .bold))
                 Text(copied ? "已复制到剪贴板" : "复制设备信息")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.custom(Palette.display, size: 16))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -266,12 +304,17 @@ struct ContentView: View {
                         LinearGradient(colors: [Palette.accent, Palette.accentDeep],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
+                    .overlay(
+                        LinearGradient(colors: [Color.white.opacity(0.22), .clear],
+                                       startPoint: .top, endPoint: .center)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: Palette.accent.opacity(0.45), radius: 22, x: 0, y: 12)
+            .shadow(color: Palette.accent.opacity(0.42), radius: 24, x: 0, y: 12)
         }
         .buttonStyle(PressableStyle())
         .opacity(appeared ? 1 : 0)
@@ -287,7 +330,7 @@ struct ContentView: View {
             Circle().fill(Color.white.opacity(0.2)).frame(width: 3, height: 3)
             Text("iOS 15+")
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.custom(Palette.display, size: 10.5))
         .foregroundStyle(Color.white.opacity(0.3))
         .opacity(appeared ? 1 : 0)
         .animation(.easeOut(duration: 0.6).delay(0.42), value: appeared)
