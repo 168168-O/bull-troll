@@ -1,0 +1,59 @@
+name: Build TrollStore IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile app (arm64, unsigned)
+        run: |
+          set -euo pipefail
+          APP="build/Payload/BullTroll.app"
+          rm -rf build
+          mkdir -p "$APP"
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun --sdk iphoneos swiftc \
+            -parse-as-library \
+            -target arm64-apple-ios15.0 \
+            -sdk "$SDK" \
+            -O \
+            -module-name BullTroll \
+            Sources/BullTrollApp.swift \
+            -o "$APP/BullTroll"
+          cp Assets/Info.plist "$APP/Info.plist"
+          cp Assets/Icons/*.png "$APP/"
+          cp Assets/logo.png "$APP/logo.png"
+          printf 'APPL????' > "$APP/PkgInfo"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.0.${GITHUB_RUN_NUMBER}" "$APP/Info.plist"
+          codesign --force --sign - "$APP" 2>/dev/null || true
+          cd build
+          zip -qry BullTroll.ipa Payload
+          ls -lh BullTroll.ipa
+          unzip -l BullTroll.ipa | head -20
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BullTroll-ipa
+          path: build/BullTroll.ipa
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: 牛头 BullTroll v1.0.${{ github.run_number }}
+          body: |
+            TrollStore 可直接安装的未签名 IPA（arm64 / iOS 15.0+）。
+            下载 BullTroll.ipa 后，在 TrollStore 里点右上角 + 选择该文件安装。
+          files: build/BullTroll.ipa
+          fail_on_unmatched_files: true
