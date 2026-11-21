@@ -1,0 +1,20 @@
+name: Runner Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - run: uname -a && echo ubuntu-ok
+
+  probe-macos-15:
+    runs-on: macos-15
+    steps:
+      - run: uname -a && xcodebuild -version && echo macos15-ok
+
+  probe-macos-latest:
+    runs-on: macos-latest
+    steps:
+      - run: uname -a && xcodebuild -version && echo macoslatest-ok
