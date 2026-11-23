@@ -51,6 +51,20 @@ jobs:
           name: BullTroll-ipa
           path: build/BullTroll.ipa
 
+      - name: Publish ipa to dist branch (jsDelivr 镜像)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dist && cp build/BullTroll.ipa /tmp/dist/
+          cd /tmp/dist
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add BullTroll.ipa
+          git commit -qm "BullTroll ipa build ${GITHUB_RUN_NUMBER}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:dist
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -58,6 +72,8 @@ jobs:
           name: 牛头 BullTroll v1.0.${{ github.run_number }}
           body: |
             TrollStore 可直接安装的未签名 IPA（arm64 / iOS 15.0+）。
-            下载 BullTroll.ipa 后，在 TrollStore 里点右上角 + 选择该文件安装。
+
+            - 国内/老系统推荐镜像：https://cdn.jsdelivr.net/gh/168168-O/bull-troll@dist/BullTroll.ipa
+            - 也可以在 TrollStore 里点右上角 + 选择已下载的 BullTroll.ipa 安装
           files: build/BullTroll.ipa
           fail_on_unmatched_files: true
