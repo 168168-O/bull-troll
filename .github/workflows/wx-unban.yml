@@ -1,0 +1,59 @@
+name: build-unban
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unban
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Unban.tipa
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          APP="u/Payload/Unban.app"
+          rm -rf u && mkdir -p "$APP"
+          xcrun --sdk iphoneos swiftc -parse-as-library -target arm64-apple-ios15.0 -sdk "$SDK" -O \
+            -module-name Unban \
+            -framework SwiftUI -framework UIKit -framework WebKit -framework AVFoundation -framework PhotosUI -framework Foundation \
+            WeChatApply/App.swift -o "$APP/Unban"
+          cp Assets/Info.plist "$APP/Info.plist"
+          cp Assets/Icons/*.png "$APP/"
+          cp Assets/logo.png "$APP/logo.png"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Unban" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.168168.bulltroll.unban" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName 牛头解封" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 牛头解封" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.0.${{ github.run_number }}" "$APP/Info.plist"
+          printf 'APPL????' > "$APP/PkgInfo"
+          codesign --force --sign - "$APP"
+          cd u && zip -qry Unban.tipa Payload && cd ..
+          ls -lh u/Unban.tipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unban-tipa
+          path: u/Unban.tipa
+          if-no-files-found: error
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: unban-v1.0.${{ github.run_number }}
+          name: 牛头解封 v1.0.${{ github.run_number }}
+          body: |
+            牛头视觉的解封申请 App（arm64 / iOS 15+）。
+            三屏：选中国/国外 → 填三格 → 生成并自动填入官网。
+          files: u/Unban.tipa
+          fail_on_unmatched_files: true
