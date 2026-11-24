@@ -18,7 +18,7 @@ enum Side: String {
     }
 }
 
-enum Scene: String, CaseIterable, Identifiable {
+enum SceneKind: String, CaseIterable, Identifiable {
     case login = "登录受限 / 环境异常"
     case report = "被他人举报 / 内容投诉"
     case market = "误判批量注册 / 营销"
@@ -69,7 +69,7 @@ final class M: ObservableObject {
     @Published var device = ""
     @Published var ios = ""
     @Published var regDate = ""
-    @Published var scene: Scene = .cross
+    @Published var scene: SceneKind = .cross
     @Published var side: Side = .intl
     @Published var out = ""
 
@@ -80,7 +80,7 @@ final class M: ObservableObject {
         phone = g("s.phone"); email = g("s.email"); region = g("s.region")
         location = g("s.loc"); banText = g("s.ban"); banDate = g("s.bdate")
         device = g("s.dev"); ios = g("s.ios"); regDate = g("s.rdate")
-        if let sc = d.string(forKey: "s.scene"), let v = Scene(rawValue: sc) { scene = v }
+        if let sc = d.string(forKey: "s.scene"), let v = SceneKind(rawValue: sc) { scene = v }
     }
 
     func save() {
@@ -132,7 +132,7 @@ struct RootView: View {
 
                 Section(header: Text("申请方式")) {
                     Picker("选一种", selection: $m.scene) {
-                        ForEach(Scene.allCases) { s in Text(s.rawValue).tag(s) }
+                        ForEach(SceneKind.allCases) { s in Text(s.rawValue).tag(s) }
                     }
                 }
 
