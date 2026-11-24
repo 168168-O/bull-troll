@@ -1,0 +1,58 @@
+name: build-tool
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tool
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Tool.tipa
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          APP="t/Payload/UnbanTool.app"
+          rm -rf t && mkdir -p "$APP"
+          xcrun --sdk iphoneos swiftc -parse-as-library -target arm64-apple-ios15.0 -sdk "$SDK" -O \
+            -module-name UnbanTool \
+            -framework SwiftUI -framework UIKit -framework WebKit -framework AVFoundation -framework PhotosUI -framework Foundation \
+            WeChatTool/*.swift -o "$APP/UnbanTool"
+          cp Assets/Info.plist "$APP/Info.plist"
+          cp Assets/Icons/*.png "$APP/"
+          cp Assets/logo.png "$APP/logo.png"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable UnbanTool" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.168168.bulltroll.tool" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName 解封助手" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 解封助手" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.0.${{ github.run_number }}" "$APP/Info.plist"
+          printf 'APPL????' > "$APP/PkgInfo"
+          codesign --force --sign - "$APP"
+          cd t && zip -qry UnbanTool.tipa Payload && cd ..
+          ls -lh t/UnbanTool.tipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tool-tipa
+          path: t/UnbanTool.tipa
+          if-no-files-found: error
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tool-v1.0.${{ github.run_number }}
+          name: 解封助手 v1.0.${{ github.run_number }}
+          body: |
+            牛头视觉的跨境解封助手：出口 IP 检测、清设备指纹、区域伪装、官方入口。
+          files: t/UnbanTool.tipa
+          fail_on_unmatched_files: true
