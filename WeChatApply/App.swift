@@ -2,7 +2,7 @@ import SwiftUI
 import WebKit
 import UIKit
 
-// 牛头解封 · 单页填写版
+// 达K解围 · 单页填写版
 // 第一屏就是表单：全部要填的都在这里，选完通道、填完、生成、申请
 // 两种产物：① 申诉正文  ② 官方邮件回信（14 条编号作答）
 
@@ -135,7 +135,7 @@ struct RootView: View {
                 Image(uiImage: logo).resizable().scaledToFit().frame(width: 30, height: 30)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("牛头解封").font(.system(size: 18, weight: .heavy))
+                Text("达K解围").font(.system(size: 18, weight: .heavy))
                     .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.72)], startPoint: .top, endPoint: .bottom))
                 Text("FILL · GENERATE · APPLY").font(.custom(P.display, size: 8))
                     .foregroundStyle(Color.white.opacity(0.35))
