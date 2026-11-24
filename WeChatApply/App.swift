@@ -43,6 +43,13 @@ final class Model: ObservableObject {
     @Published var phone = ""
     @Published var cc = "+95"
     @Published var email = ""
+    @Published var nickname = ""
+    @Published var region = ""
+    @Published var location = ""
+    @Published var banText = ""
+    @Published var date = ""
+    @Published var device = "iPhone 12"
+    @Published var ios = "15.3"
     @Published var step = 0
     @Published var shot: UIImage? = nil
 
@@ -52,6 +59,13 @@ final class Model: ObservableObject {
         phone = d.string(forKey: "u.phone") ?? ""
         cc = d.string(forKey: "u.cc") ?? "+95"
         email = d.string(forKey: "u.email") ?? ""
+        nickname = d.string(forKey: "u.nick") ?? ""
+        region = d.string(forKey: "u.region") ?? ""
+        location = d.string(forKey: "u.location") ?? ""
+        banText = d.string(forKey: "u.ban") ?? ""
+        date = d.string(forKey: "u.date") ?? ""
+        device = d.string(forKey: "u.device") ?? "iPhone 12"
+        ios = d.string(forKey: "u.ios") ?? "15.3"
         if let s = d.string(forKey: "u.side"), let v = Side(rawValue: s) { side = v }
     }
 
@@ -61,6 +75,13 @@ final class Model: ObservableObject {
         d.set(phone, forKey: "u.phone")
         d.set(cc, forKey: "u.cc")
         d.set(email, forKey: "u.email")
+        d.set(nickname, forKey: "u.nick")
+        d.set(region, forKey: "u.region")
+        d.set(location, forKey: "u.location")
+        d.set(banText, forKey: "u.ban")
+        d.set(date, forKey: "u.date")
+        d.set(device, forKey: "u.device")
+        d.set(ios, forKey: "u.ios")
         d.set(side?.rawValue ?? "", forKey: "u.side")
     }
 
@@ -275,6 +296,29 @@ struct RootView: View {
                 field("微信号", "wxid 开头那串也行", $m.wxid, .default)
                 field("手机号", "只填数字，去掉开头的 0", $m.phone, .phonePad)
                 field("收结果的邮箱", "没有就填家人的", $m.email, .emailAddress)
+                Button {
+                    showMore.toggle()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: showMore ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(showMore ? "收起补充资料" : "补充资料（昵称 / 注册地 / 封禁原文…）")
+                            .font(.system(size: 13))
+                        Spacer()
+                    }
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .padding(.horizontal, 20)
+                }
+                .buttonStyle(PlainButtonStyle())
+                if showMore {
+                    field("微信昵称", "可不填", $m.nickname, .default)
+                    field("注册地区", "如 Chinese Taiwan", $m.region, .default)
+                    field("常驻登录地", "如 Wa State, Myanmar", $m.location, .default)
+                    field("封禁提示原文", "截图那句话", $m.banText, .default)
+                    field("被封日期", "2026-11-01", $m.date, .default)
+                    field("机型", "iPhone 12", $m.device, .default)
+                    field("系统版本", "15.3", $m.ios, .default)
+                }
                 photoRow
                 if let img = m.shot {
                     Image(uiImage: img).resizable().scaledToFit()
@@ -288,6 +332,7 @@ struct RootView: View {
     }
 
     @State private var showPicker = false
+    @State private var showMore = false
 
     private var photoRow: some View {
         Button { showPicker = true } label: {
@@ -372,12 +417,36 @@ struct RootView: View {
             : "Appeal: \(m.wxid) — login restriction, manual verification requested"
     }
 
+    private func extraCN() -> String {
+        var lines: [String] = []
+        if !m.nickname.isEmpty { lines.append("- 昵称：\(m.nickname)") }
+        if !m.region.isEmpty { lines.append("- 注册地区：\(m.region)") }
+        if !m.location.isEmpty { lines.append("- 常驻登录地：\(m.location)") }
+        if !m.banText.isEmpty { lines.append("- 封禁提示：\(m.banText)") }
+        if !m.date.isEmpty { lines.append("- 被封日期：\(m.date)") }
+        lines.append("- 设备：\(m.device)，iOS \(m.ios)")
+        return "账号资料\n" + lines.joined(separator: "\n")
+    }
+
+    private func extraEN() -> String {
+        var lines: [String] = []
+        if !m.nickname.isEmpty { lines.append("- WeChat name: \(m.nickname)") }
+        if !m.region.isEmpty { lines.append("- Registered region: \(m.region)") }
+        if !m.location.isEmpty { lines.append("- Regular login location: \(m.location)") }
+        if !m.banText.isEmpty { lines.append("- Restriction message: \(m.banText)") }
+        if !m.date.isEmpty { lines.append("- Date of restriction: \(m.date)") }
+        lines.append("- Device: \(m.device), iOS \(m.ios)")
+        return "ACCOUNT DETAILS\n" + lines.joined(separator: "\n")
+    }
+
     private func contentText() -> String {
         if m.side == .cn {
             return """
             微信安全中心：
 
             我的微信账号 \(m.wxid)，绑定手机 \(m.cc) \(m.phone)，现被限制登录。自助解封要求好友辅助验证，我这边没有可配合的好友，走不下去，申请人工核验。
+
+            \(m.extraCN())
 
             一、账号情况
             1. 账号一直由本人使用，没有外借、出租或买卖。
@@ -403,6 +472,8 @@ struct RootView: View {
         - Device: iPhone 12
 
         The account is locked by the cross-region login check, and the self-unblock flow stops at friend verification, which I have no way to complete. I am asking for manual verification of ownership and for the restriction to be lifted.
+
+        \(m.extraEN())
 
         1. This is a personal account used by me only. It has never been sold, rented or shared.
         2. I have sent no advertising, no mass messages and no investment offers.
