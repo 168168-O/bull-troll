@@ -563,40 +563,81 @@ struct WebBox: UIViewRepresentable {
         """
         (function(){
           var D = \(json);
-          function set(el,v){
+          function setVal(el,v){
             if(!el||v===undefined)return;
-            var p = el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
-            var d = Object.getOwnPropertyDescriptor(p,'value');
-            try{d.set.call(el,v);}catch(e){el.value=v;}
-            ['input','change','keyup','blur'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});
+            var tag=el.tagName;
+            var proto = tag==='TEXTAREA'?HTMLTextAreaElement.prototype : tag==='SELECT'?HTMLSelectElement.prototype : HTMLInputElement.prototype;
+            var d = Object.getOwnPropertyDescriptor(proto,'value');
+            try{ d.set.call(el,v); }catch(e){ el.value=v; }
+            ['input','change','keyup','blur'].forEach(function(t){ el.dispatchEvent(new Event(t,{bubbles:true})); });
           }
-          function lbl(el){
+          function lab(el){
             var s=[el.name,el.id,el.placeholder,el.getAttribute('aria-label')].filter(Boolean).join(' ');
             var l=el.closest('label'); if(l) s+=' '+l.textContent;
-            var w=el.closest('div,li,tr,section,form'); if(w&&w.textContent) s+=' '+w.textContent.slice(0,200);
+            var w=el.closest('div,li,tr,section,fieldset,form'); if(w&&w.textContent) s+=' '+w.textContent.slice(0,220);
             return s.toLowerCase();
           }
+          function choose(sel,re){
+            if(!sel||!sel.options) return false;
+            for(var i=0;i<sel.options.length;i++){
+              var txt=(sel.options[i].text||'').trim();
+              if(re.test(txt.toLowerCase())){ setVal(sel, sel.options[i].value); return true; }
+            }
+            return false;
+          }
+          var hit={p:0,r:0,c:0,d:0,w:0,e:0,k:0};
           function fill(){
-            var ins=[].slice.call(document.querySelectorAll('input,textarea'))
-              .filter(function(e){return e.offsetParent!==null&&e.type!=='hidden'&&!e.value;});
-            ins.forEach(function(el){
-              var k=lbl(el);
-              if(/e-?mail/.test(k)) set(el,D.email);
-              else if(/subject|主题|标题/.test(k)) set(el,D.subject);
-              else if(el.tagName==='TEXTAREA'&&/descript|detail|content|message|问题|描述|说明|申诉/.test(k)) set(el,D.content);
+            var ins=[].slice.call(document.querySelectorAll('input,textarea')).filter(function(e){
+              return e.offsetParent!==null && e.type!=='hidden' && e.type!=='file';
             });
-            var ta=[].slice.call(document.querySelectorAll('textarea'))
-              .filter(function(e){return e.offsetParent!==null;})
-              .sort(function(a,b){return (b.rows*b.cols)-(a.rows*a.cols);})[0];
-            if(ta&&!ta.value) set(ta,D.content);
+            ins.forEach(function(el){
+              var k=lab(el);
+              if(/e-?mail|邮箱/.test(k)){ setVal(el,D.email); hit.e++; return; }
+              if(/wechat\s*id|wxid|account id|微信号/.test(k)){ setVal(el,D.wxid); hit.w++; return; }
+              if(el.tagName==='TEXTAREA' && /descript|detail|content|message|问题|描述|说明|申诉/.test(k)){ setVal(el,D.content); hit.d++; return; }
+              if(/region|地区|国家/.test(k)){ setVal(el,D.region); hit.r++; return; }
+            });
+
+            var sels=[].slice.call(document.querySelectorAll('select'));
+            sels.forEach(function(s){
+              var k=lab(s);
+              if(/platform|平台|系统/.test(k)){ if(choose(s,/ios|iphone/i)) hit.p++; return; }
+              if(/contact|联系/.test(k)){ if(choose(s,/email|邮件/i)) hit.k++; return; }
+              if(/categor|分类|问题类型/.test(k)){ if(choose(s,/account security|账号安全|account/i)) hit.c++; return; }
+              if(/region|地区|国家/.test(k)){ if(choose(s,/myanmar|taiwan|china|other|其它/i)) hit.r++; return; }
+            });
+
+            // 分类二级联动
+            setTimeout(function(){
+              [].slice.call(document.querySelectorAll('select')).forEach(function(s){
+                if(/categor|分类|问题类型/.test(lab(s))) choose(s,/account blocked|blocked|封禁|账号被封/i);
+              });
+            },900);
+
+            // 描述兜底：最大文本框
+            if(!hit.d){
+              var ta=[].slice.call(document.querySelectorAll('textarea'))
+                .filter(function(e){return e.offsetParent!==null;})
+                .sort(function(a,b){return (b.rows*b.cols)-(a.rows*a.cols);})[0];
+              if(ta){ setVal(ta,D.content); hit.d++; }
+            }
+
+            // 文件框：高亮提示手动选
+            [].slice.call(document.querySelectorAll('input[type=file]')).forEach(function(f){
+              f.style.outline='3px solid #ed3833';
+              f.style.outlineOffset='2px';
+            });
+
             var bar=document.createElement('div');
-            bar.textContent='已自动填好，核对后点提交';
-            bar.style.cssText='position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;background:#ed3833;color:#fff;padding:12px;border-radius:12px;font:15px -apple-system;text-align:center';
+            bar.textContent='已填 '+((hit.p?1:0)+(hit.r?1:0)+(hit.c?1:0)+(hit.d?1:0)+(hit.w?1:0)+(hit.e?1:0)+(hit.k?1:0))+
+              ' 项 · 截图请自己点红框选一张 · 核对后点提交';
+            bar.style.cssText='position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;background:#ed3833;color:#fff;padding:12px;border-radius:12px;font:14px -apple-system;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)';
             document.body.appendChild(bar);
-            setTimeout(function(){bar.remove();},5000);
+            setTimeout(function(){bar.remove();},6000);
           }
           setTimeout(fill,1200);
-          setTimeout(fill,3200);
+          setTimeout(fill,3000);
+          setTimeout(fill,5000);
         })();
         """
     }
