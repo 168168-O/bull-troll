@@ -446,7 +446,7 @@ struct RootView: View {
 
             我的微信账号 \(m.wxid)，绑定手机 \(m.cc) \(m.phone)，现被限制登录。自助解封要求好友辅助验证，我这边没有可配合的好友，走不下去，申请人工核验。
 
-            \(m.wrappedValue.extraCN())
+            \(extraCN())
 
             一、账号情况
             1. 账号一直由本人使用，没有外借、出租或买卖。
@@ -473,7 +473,7 @@ struct RootView: View {
 
         The account is locked by the cross-region login check, and the self-unblock flow stops at friend verification, which I have no way to complete. I am asking for manual verification of ownership and for the restriction to be lifted.
 
-        \(m.wrappedValue.extraEN())
+        \(extraEN())
 
         1. This is a personal account used by me only. It has never been sold, rented or shared.
         2. I have sent no advertising, no mass messages and no investment offers.
