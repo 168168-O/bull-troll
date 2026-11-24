@@ -240,10 +240,15 @@ struct RootView: View {
                                                              startPoint: .topLeading, endPoint: .bottomTrailing)))
                             }.buttonStyle(PlainButtonStyle())
                             if !out.isEmpty {
-                                ScrollView {
-                                    Text(out).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.75))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }.frame(maxHeight: 180)
+                                TextEditor(text: $out)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(height: 190)
+                                    .padding(6)
+                                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                                    .disableAutocorrection(true)
                                 HStack(spacing: 10) {
                                     Button("复制") { UIPasteboard.general.string = out }
                                     Button("清空") { out = "" }
