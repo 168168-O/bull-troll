@@ -1,15 +1,14 @@
 import SwiftUI
 import WebKit
-import AVFoundation
-import PhotosUI
+import UIKit
 
-// 牛头解封 · 视觉沿用 BullTroll：黑底、红金渐变、材质卡片、logo 主视觉
-// 功能沿用三屏：选通道 → 填三格 → 一键生成并自动填入官网
+// 牛头解封 · 单页填写版
+// 第一屏就是表单：全部要填的都在这里，选完通道、填完、生成、申请
+// 两种产物：① 申诉正文  ② 官方邮件回信（14 条编号作答）
 
 enum Side: String {
     case cn, intl
     var title: String { self == .cn ? "中国微信" : "国外微信" }
-    var hint: String { self == .cn ? "+86 手机号注册" : "+65 / +95 这类" }
     var symbol: String { self == .cn ? "message.fill" : "globe" }
     var url: String {
         self == .cn
@@ -18,447 +17,346 @@ enum Side: String {
     }
 }
 
-private enum Palette {
+private enum P {
     static let accent = Color(red: 0.93, green: 0.22, blue: 0.18)
     static let accentDeep = Color(red: 0.55, green: 0.09, blue: 0.08)
-    static let base = Color.black
     static let display = "AvenirNext-DemiBold"
 }
 
-final class Speaker {
-    static let shared = Speaker()
-    private let synth = AVSpeechSynthesizer()
-    func say(_ t: String) {
-        synth.stopSpeaking(at: .immediate)
-        let u = AVSpeechUtterance(string: t)
-        u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        u.rate = 0.45
-        synth.speak(u)
-    }
-}
-
-final class Model: ObservableObject {
-    @Published var side: Side? = nil
+final class Form: ObservableObject {
+    @Published var side: Side = .intl
     @Published var wxid = ""
-    @Published var phone = ""
+    @Published var realName = ""
     @Published var cc = "+95"
+    @Published var phone = ""
+    @Published var prevPhones = ""
     @Published var email = ""
-    @Published var nickname = ""
-    @Published var region = ""
+    @Published var facebook = "No"
     @Published var location = ""
-    @Published var banText = ""
-    @Published var date = ""
+    @Published var region = ""
     @Published var device = "iPhone 12"
     @Published var ios = "15.3"
-    @Published var step = 0
-    @Published var shot: UIImage? = nil
+    @Published var regDate = ""
+    @Published var banDate = ""
+    @Published var lang = "English"
+    @Published var delFriend = ""
+    @Published var features = ""
+    @Published var banText = ""
+    @Published var mode = 0   // 0 申诉正文  1 邮件回信
 
     init() {
         let d = UserDefaults.standard
-        wxid = d.string(forKey: "u.wxid") ?? ""
-        phone = d.string(forKey: "u.phone") ?? ""
-        cc = d.string(forKey: "u.cc") ?? "+95"
-        email = d.string(forKey: "u.email") ?? ""
-        nickname = d.string(forKey: "u.nick") ?? ""
-        region = d.string(forKey: "u.region") ?? ""
-        location = d.string(forKey: "u.location") ?? ""
-        banText = d.string(forKey: "u.ban") ?? ""
-        date = d.string(forKey: "u.date") ?? ""
-        device = d.string(forKey: "u.device") ?? "iPhone 12"
-        ios = d.string(forKey: "u.ios") ?? "15.3"
-        if let s = d.string(forKey: "u.side"), let v = Side(rawValue: s) { side = v }
+        func s(_ k: String, _ def: String) -> String { d.string(forKey: k) ?? def }
+        wxid = s("f.wxid", "")
+        realName = s("f.name", "")
+        cc = s("f.cc", "+95")
+        phone = s("f.phone", "")
+        prevPhones = s("f.prev", "")
+        email = s("f.email", "")
+        facebook = s("f.fb", "No")
+        location = s("f.loc", "")
+        region = s("f.reg", "")
+        device = s("f.dev", "iPhone 12")
+        ios = s("f.ios", "15.3")
+        regDate = s("f.regdate", "")
+        banDate = s("f.bandate", "")
+        lang = s("f.lang", "English")
+        delFriend = s("f.del", "")
+        features = s("f.feat", "")
+        banText = s("f.ban", "")
     }
 
     func save() {
         let d = UserDefaults.standard
-        d.set(wxid, forKey: "u.wxid")
-        d.set(phone, forKey: "u.phone")
-        d.set(cc, forKey: "u.cc")
-        d.set(email, forKey: "u.email")
-        d.set(nickname, forKey: "u.nick")
-        d.set(region, forKey: "u.region")
-        d.set(location, forKey: "u.location")
-        d.set(banText, forKey: "u.ban")
-        d.set(date, forKey: "u.date")
-        d.set(device, forKey: "u.device")
-        d.set(ios, forKey: "u.ios")
-        d.set(side?.rawValue ?? "", forKey: "u.side")
+        d.set(wxid, forKey: "f.wxid"); d.set(realName, forKey: "f.name")
+        d.set(cc, forKey: "f.cc"); d.set(phone, forKey: "f.phone")
+        d.set(prevPhones, forKey: "f.prev"); d.set(email, forKey: "f.email")
+        d.set(facebook, forKey: "f.fb"); d.set(location, forKey: "f.loc")
+        d.set(region, forKey: "f.reg"); d.set(device, forKey: "f.dev")
+        d.set(ios, forKey: "f.ios"); d.set(regDate, forKey: "f.regdate")
+        d.set(banDate, forKey: "f.bandate"); d.set(lang, forKey: "f.lang")
+        d.set(delFriend, forKey: "f.del"); d.set(features, forKey: "f.feat")
+        d.set(banText, forKey: "f.ban")
     }
 
-    var ready: Bool { !wxid.isEmpty && !phone.isEmpty && !email.isEmpty }
+    var canGenerate: Bool { !wxid.isEmpty && !phone.isEmpty && !email.isEmpty }
 }
 
 @main
 struct UnbanApp: App {
-    var body: some Scene {
-        WindowGroup { RootView().preferredColorScheme(.dark) }
-    }
+    var body: some Scene { WindowGroup { RootView().preferredColorScheme(.dark) } }
 }
 
 struct RootView: View {
-    @StateObject private var m = Model()
+    @StateObject private var f = Form()
+    @State private var out = ""
     @State private var showWeb = false
     @State private var appeared = false
 
     var body: some View {
         ZStack {
-            background
-
+            bg
             VStack(spacing: 0) {
                 topBar
-                Group {
-                    if m.step == 0 { channelStep } else if m.step == 1 { formStep } else { applyStep }
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        sideRow
+                        baseCard
+                        linkCard
+                        usageCard
+                        outputCard
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 6)
+                    .padding(.bottom, 24)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 bottomBar
             }
         }
         .sheet(isPresented: $showWeb) {
-            WebFill(side: m.side ?? .intl, url: (m.side ?? .intl).url,
-                    email: m.email, subject: subject(), content: contentText())
+            WebFill(side: f.side, url: f.side.url, email: f.email,
+                    subject: subject(), content: f.mode == 0 ? appealText() : mailText())
         }
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.6)) { appeared = true }
-            Speaker.shared.say(speech())
-        }
+        .onAppear { withAnimation(.easeOut(duration: 0.5)) { appeared = true } }
     }
 
-    // MARK: 背景
-
-    private var background: some View {
+    private var bg: some View {
         ZStack {
-            Palette.base.ignoresSafeArea()
-            RadialGradient(colors: [Palette.accent.opacity(0.30), Palette.accent.opacity(0.05), .clear],
-                           center: .init(x: 0.5, y: 0.14), startRadius: 8, endRadius: 330)
-                .ignoresSafeArea()
-            LinearGradient(colors: [.clear, Color.black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-                .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
+            RadialGradient(colors: [P.accent.opacity(0.28), P.accent.opacity(0.04), .clear],
+                           center: .init(x: 0.5, y: 0.10), startRadius: 8, endRadius: 300).ignoresSafeArea()
+            LinearGradient(colors: [.clear, Color.black.opacity(0.65)], startPoint: .center, endPoint: .bottom).ignoresSafeArea()
         }
     }
-
-    // MARK: 顶栏
 
     private var topBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if let logo = UIImage(named: "logo") {
-                Image(uiImage: logo).resizable().scaledToFit().frame(width: 34, height: 34)
+                Image(uiImage: logo).resizable().scaledToFit().frame(width: 30, height: 30)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("牛头解封").font(.system(size: 20, weight: .heavy))
-                    .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.7)],
-                                                    startPoint: .top, endPoint: .bottom))
-                Text("UNBAN · \(m.step + 1)/3")
-                    .font(.custom(Palette.display, size: 9.5))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("牛头解封").font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.72)], startPoint: .top, endPoint: .bottom))
+                Text("FILL · GENERATE · APPLY").font(.custom(P.display, size: 8))
                     .foregroundStyle(Color.white.opacity(0.35))
             }
             Spacer()
-            Button { Speaker.shared.say(speech()) } label: {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+        }
+        .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 6)
+    }
+
+    // 通道
+    private var sideRow: some View {
+        HStack(spacing: 10) {
+            sideBtn(.cn); sideBtn(.intl)
+        }
+    }
+
+    private func sideBtn(_ s: Side) -> some View {
+        Button { f.side = s } label: {
+            HStack(spacing: 7) {
+                Image(systemName: s.symbol).font(.system(size: 13, weight: .bold))
+                Text(s.title).font(.system(size: 15, weight: .semibold))
             }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-    }
-
-    // MARK: 底部
-
-    private var bottomBar: some View {
-        HStack(spacing: 12) {
-            if m.step > 0 {
-                Button {
-                    m.step -= 1
-                    Speaker.shared.say(speech())
-                } label: {
-                    Text("上一步").font(.custom(Palette.display, size: 15))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).frame(height: 52)
-                        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                }
-            }
-            Button { advance() } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: m.step == 2 ? "paperplane.fill" : "arrow.right")
-                        .font(.system(size: 15, weight: .bold))
-                    Text(m.step == 2 ? "生成并申请" : "下一步")
-                        .font(.custom(Palette.display, size: 16))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).frame(height: 54)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(LinearGradient(colors: [Palette.accent, Palette.accentDeep],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .overlay(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
-                                                startPoint: .top, endPoint: .center)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
-                )
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
-                .shadow(color: Palette.accent.opacity(0.42), radius: 22, x: 0, y: 10)
-                .opacity(canAdvance ? 1 : 0.45)
-            }
-            .disabled(!canAdvance)
-        }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 14)
-    }
-
-    private var canAdvance: Bool {
-        if m.step == 0 { return m.side != nil }
-        if m.step == 1 { return m.ready }
-        return true
-    }
-
-    private func advance() {
-        if m.step < 2 {
-            m.save()
-            m.step += 1
-            Speaker.shared.say(speech())
-        } else {
-            m.save()
-            showWeb = true
-        }
-    }
-
-    private func speech() -> String {
-        switch m.step {
-        case 0: return "第一步。你的微信是哪种手机号注册的。中国号点左边，国外号点右边。"
-        case 1: return "第二步。填微信号、手机号、收结果的邮箱。"
-        default: return "第三步。点生成并申请，我会打开官方网站，把内容自动填好。"
-        }
-    }
-
-    // MARK: 第 1 屏
-
-    private var channelStep: some View {
-        VStack(spacing: 16) {
-            Text("你的微信，是用哪种手机号注册的？")
-                .font(.system(size: 19, weight: .semibold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.white.opacity(0.86))
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
-
-            sideCard(.cn)
-            sideCard(.intl)
-            Spacer()
-        }
-    }
-
-    private func sideCard(_ s: Side) -> some View {
-        Button {
-            m.side = s
-            m.step = 1
-            Speaker.shared.say(s == .cn ? "你选了国内。" : "你选了国外。")
-        } label: {
-            HStack(spacing: 16) {
-                Image(systemName: s.symbol)
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(Palette.accent)
-                    .frame(width: 58, height: 58)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(s.title).font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                    Text(s.hint).font(.system(size: 14)).foregroundStyle(Color.white.opacity(0.5))
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.35))
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color.white.opacity(m.side == s ? 0.10 : 0.035)))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(m.side == s ? 0.30 : 0.12), lineWidth: 1))
-            .padding(.horizontal, 20)
+            .foregroundStyle(f.side == s ? .white : Color.white.opacity(0.55))
+            .frame(maxWidth: .infinity).frame(height: 46)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(f.side == s ? P.accent.opacity(0.85) : Color.white.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(f.side == s ? 0.25 : 0.10), lineWidth: 1))
         }
         .buttonStyle(PlainButtonStyle())
     }
 
-    // MARK: 第 2 屏
+    // 基础
+    private var baseCard: some View {
+        card("账号") {
+            VStack(spacing: 12) {
+                row("微信号", $f.wxid, "wxid_xxx 或 xfxf77887")
+                row("姓名（证件上的）", $f.realName, "full name")
+                HStack(spacing: 8) {
+                    smallField("区号", $f.cc, "+95", 62)
+                    row("手机号", $f.phone, "可收短信，去掉开头 0")
+                }
+                row("收信邮箱", $f.email, "回复只到这个邮箱")
+                row("注册地区", $f.region, "Chinese Taiwan")
+                row("常用登录地", $f.location, "Wa State, Myanmar")
+            }
+        }
+    }
 
-    private var formStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 14) {
-                field("微信号", "wxid 开头那串也行", $m.wxid, .default)
-                field("手机号", "只填数字，去掉开头的 0", $m.phone, .phonePad)
-                field("收结果的邮箱", "没有就填家人的", $m.email, .emailAddress)
-                Button {
-                    showMore.toggle()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: showMore ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(showMore ? "收起补充资料" : "补充资料（昵称 / 注册地 / 封禁原文…）")
-                            .font(.system(size: 13))
-                        Spacer()
-                    }
-                    .foregroundStyle(Color.white.opacity(0.55))
-                    .padding(.horizontal, 20)
+    // 关联
+    private var linkCard: some View {
+        card("关联信息") {
+            VStack(spacing: 12) {
+                row("曾绑定的其它号码", $f.prevPhones, "没有就写 None")
+                row("是否绑定 Facebook", $f.facebook, "No")
+                row("注册日期", $f.regDate, "2026-04-26")
+                row("被封日期", $f.banDate, "2026-11-01")
+                row("设备机型", $f.device, "iPhone 12")
+                row("系统版本", $f.ios, "15.3")
+            }
+        }
+    }
+
+    // 使用
+    private var usageCard: some View {
+        card("使用情况") {
+            VStack(spacing: 12) {
+                row("微信语言", $f.lang, "English")
+                row("最近删好友（时间+地点）", $f.delFriend, "没删过写 None")
+                row("最近常用功能", $f.features, "聊天 / 朋友圈 / 支付")
+                row("封禁提示原文", $f.banText, "截图那句英文")
+            }
+        }
+    }
+
+    // 输出
+    private var outputCard: some View {
+        card("生成内容") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    modeBtn(0, "申诉正文")
+                    modeBtn(1, "邮件回信 14 条")
+                }
+                Button { generate() } label: {
+                    Text("生成")
+                        .font(.custom(P.display, size: 15))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).frame(height: 46)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(LinearGradient(colors: [P.accent, P.accentDeep],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)))
                 }
                 .buttonStyle(PlainButtonStyle())
-                if showMore {
-                    field("微信昵称", "可不填", $m.nickname, .default)
-                    field("注册地区", "如 Chinese Taiwan", $m.region, .default)
-                    field("常驻登录地", "如 Wa State, Myanmar", $m.location, .default)
-                    field("封禁提示原文", "截图那句话", $m.banText, .default)
-                    field("被封日期", "2026-11-01", $m.date, .default)
-                    field("机型", "iPhone 12", $m.device, .default)
-                    field("系统版本", "15.3", $m.ios, .default)
-                }
-                photoRow
-                if let img = m.shot {
-                    Image(uiImage: img).resizable().scaledToFit()
-                        .frame(height: 120).cornerRadius(12).padding(.horizontal, 20)
+                .opacity(f.canGenerate ? 1 : 0.45)
+                .disabled(!f.canGenerate)
+
+                if !out.isEmpty {
+                    ScrollView {
+                        Text(out).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.75))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 220)
+                    HStack(spacing: 8) {
+                        Button("复制") { UIPasteboard.general.string = out }
+                        Button("清空") { out = "" }
+                    }
+                    .font(.system(size: 12)).foregroundStyle(P.accent)
                 }
             }
-            .padding(.top, 6)
-            .padding(.bottom, 12)
         }
-        .sheet(isPresented: $showPicker) { ImagePicker(image: $m.shot) }
     }
 
-    @State private var showPicker = false
-    @State private var showMore = false
-
-    private var photoRow: some View {
-        Button { showPicker = true } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                Text(m.shot == nil ? "选一张封禁截图（可不选）" : "已选截图，点这里换")
-                    .font(.system(size: 14)).foregroundStyle(Color.white.opacity(0.75))
-                Spacer()
-            }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            .padding(.horizontal, 20)
+    private func modeBtn(_ i: Int, _ t: String) -> some View {
+        Button { f.mode = i } label: {
+            Text(t).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(f.mode == i ? .white : Color.white.opacity(0.5))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Capsule().fill(f.mode == i ? P.accent.opacity(0.85) : Color.white.opacity(0.06)))
         }
         .buttonStyle(PlainButtonStyle())
     }
 
-    private func field(_ title: String, _ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.custom(Palette.display, size: 12))
-                .foregroundStyle(Color.white.opacity(0.4))
+    private var bottomBar: some View {
+        Button {
+            if out.isEmpty { generate() }
+            f.save()
+            showWeb = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "paperplane.fill").font(.system(size: 13, weight: .bold))
+                Text("申请解封（自动填入官网）").font(.custom(P.display, size: 14))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 52)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient(colors: [P.accent, P.accentDeep], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .shadow(color: P.accent.opacity(0.4), radius: 18, x: 0, y: 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .opacity(f.canGenerate ? 1 : 0.45)
+        .disabled(!f.canGenerate)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
+    }
+
+    // 组件
+    private func card<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title).font(.custom(P.display, size: 10))
+                .foregroundStyle(Color.white.opacity(0.34))
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+            content().padding(.horizontal, 16).padding(.bottom, 16)
+        }
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.ultraThinMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+    }
+
+    private func row(_ title: String, _ text: Binding<String>, _ hint: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.45))
             TextField(hint, text: text)
-                .font(.system(size: 18))
-                .keyboardType(kb)
+                .font(.system(size: 15))
                 .disableAutocorrection(true)
                 .autocapitalization(.none)
                 .foregroundStyle(.white)
-                .padding(14)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-        }
-        .padding(.horizontal, 20)
-    }
-
-    // MARK: 第 3 屏
-
-    private var applyStep: some View {
-        VStack(spacing: 18) {
-            Spacer()
-            VStack(spacing: 12) {
-                row("通道", (m.side ?? .intl).title)
-                divider
-                row("微信号", m.wxid)
-                divider
-                row("手机号", m.cc + " " + m.phone)
-                divider
-                row("邮箱", m.email)
-            }
-            .padding(18)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.ultraThinMaterial))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            .padding(.horizontal, 20)
-
-            Text("进去以后核对一下，点页面上的提交")
-                .font(.system(size: 13)).foregroundStyle(Color.white.opacity(0.4))
-            Spacer()
+                .padding(11)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
         }
     }
 
-    private var divider: some View { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1) }
-
-    private func row(_ k: String, _ v: String) -> some View {
-        HStack {
-            Text(k).font(.system(size: 13)).foregroundStyle(Color.white.opacity(0.45))
-            Spacer()
-            Text(v.isEmpty ? "未填" : v).font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
-                .lineLimit(1).minimumScaleFactor(0.7)
+    private func smallField(_ title: String, _ text: Binding<String>, _ hint: String, _ w: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.45))
+            TextField(hint, text: text)
+                .font(.system(size: 15)).foregroundStyle(.white)
+                .padding(11)
+                .frame(width: w)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
         }
     }
 
-    // MARK: 文案
+    // 文案
+    private func generate() {
+        out = f.mode == 0 ? appealText() : mailText()
+        f.save()
+    }
 
     private func subject() -> String {
-        m.side == .cn
-            ? "申诉：账号 \(m.wxid) 登录受限，申请人工核验"
-            : "Appeal: \(m.wxid) — login restriction, manual verification requested"
+        f.side == .cn
+            ? "申诉：账号 \(f.wxid) 登录受限，申请人工核验"
+            : "Appeal: \(f.wxid) — login restriction, manual verification requested"
     }
 
-    private func extraCN() -> String {
-        var lines: [String] = []
-        if !m.nickname.isEmpty { lines.append("- 昵称：\(m.nickname)") }
-        if !m.region.isEmpty { lines.append("- 注册地区：\(m.region)") }
-        if !m.location.isEmpty { lines.append("- 常驻登录地：\(m.location)") }
-        if !m.banText.isEmpty { lines.append("- 封禁提示：\(m.banText)") }
-        if !m.date.isEmpty { lines.append("- 被封日期：\(m.date)") }
-        lines.append("- 设备：\(m.device)，iOS \(m.ios)")
-        return "账号资料\n" + lines.joined(separator: "\n")
-    }
-
-    private func extraEN() -> String {
-        var lines: [String] = []
-        if !m.nickname.isEmpty { lines.append("- WeChat name: \(m.nickname)") }
-        if !m.region.isEmpty { lines.append("- Registered region: \(m.region)") }
-        if !m.location.isEmpty { lines.append("- Regular login location: \(m.location)") }
-        if !m.banText.isEmpty { lines.append("- Restriction message: \(m.banText)") }
-        if !m.date.isEmpty { lines.append("- Date of restriction: \(m.date)") }
-        lines.append("- Device: \(m.device), iOS \(m.ios)")
-        return "ACCOUNT DETAILS\n" + lines.joined(separator: "\n")
-    }
-
-    private func contentText() -> String {
-        if m.side == .cn {
+    private func appealText() -> String {
+        if f.side == .cn {
             return """
             微信安全中心：
 
-            我的微信账号 \(m.wxid)，绑定手机 \(m.cc) \(m.phone)，现被限制登录。自助解封要求好友辅助验证，我这边没有可配合的好友，走不下去，申请人工核验。
-
-            \(extraCN())
+            我的微信账号 \(f.wxid)（姓名 \(f.realName)，绑定手机 \(f.cc) \(f.phone)，注册地区 \(f.region)，常用登录地 \(f.location)），在 \(f.banDate) 登录时提示“\(f.banText)”，此后一直登不上。
 
             一、账号情况
-            1. 账号一直由本人使用，没有外借、出租或买卖。
-            2. 绑定手机 \(m.cc) \(m.phone) 在本人手上，可随时接收验证码。
-            3. 没有群发、没有加粉、没有使用外挂或改版客户端。
+            1. 账号由本人使用，设备为 \(f.device)（iOS \(f.ios)），无外借、出租、买卖。
+            2. 绑定手机 \(f.cc) \(f.phone) 在本人手上，可接收验证码。
+            3. 未群发、未加粉、未使用外挂或改版客户端。
 
             二、申请事项
-            1. 请人工核验账号归属，解除 \(m.wxid) 的登录限制。
-            2. 验证码可发送至 \(m.cc) \(m.phone)。
-            3. 处理结果请回信至 \(m.email)。
+            1. 请人工核验账号归属，解除 \(f.wxid) 的登录限制。
+            2. 验证码可发送至 \(f.cc) \(f.phone)。
+            3. 处理结果请回信至 \(f.email)。
 
-            联系电话：\(m.cc) \(m.phone)
+            姓名：\(f.realName)
+            联系电话：\(f.cc) \(f.phone)
             """
         }
         return """
@@ -466,56 +364,71 @@ struct RootView: View {
 
         I am writing to appeal the login restriction on my WeChat account.
 
-        - WeChat ID: \(m.wxid)
-        - Linked mobile number: \(m.cc) \(m.phone)
-        - Contact email: \(m.email)
-        - Device: iPhone 12
+        ACCOUNT DETAILS
+        - WeChat ID: \(f.wxid)
+        - Full name: \(f.realName)
+        - Mobile number that receives SMS: \(f.cc) \(f.phone)
+        - Contact email: \(f.email)
+        - Registered region: \(f.region)
+        - Regular login location: \(f.location)
+        - Device: \(f.device), iOS \(f.ios)
+        - Registration date: \(f.regDate)
+        - Date of restriction: \(f.banDate)
+        - Restriction message: \(f.banText)
 
-        The account is locked by the cross-region login check, and the self-unblock flow stops at friend verification, which I have no way to complete. I am asking for manual verification of ownership and for the restriction to be lifted.
+        WHY THIS IS A FALSE POSITIVE
+        I live in \(f.location) and use my own local number \(f.cc) \(f.phone). My registered region, the country of the number and my login location differ, which the system reads as abnormal. For me it is normal: one person, one device, one city, for months. The account has never been sold, rented or shared.
 
-        \(extraEN())
+        MY USE OF THE ACCOUNT
+        1. Personal account: family chats, one work group and payments.
+        2. No advertising, no mass messages, no investment offers.
+        3. No bulk-add tools, bots, account farms, virtual numbers or modified clients.
+        4. No complaint notice received before this restriction.
 
-        1. This is a personal account used by me only. It has never been sold, rented or shared.
-        2. I have sent no advertising, no mass messages and no investment offers.
-        3. I have not used bulk-add tools, bots, account farms, virtual numbers or modified clients.
-        4. The number \(m.cc) \(m.phone) is in my hands and receives SMS at any time.
-
-        Please verify ownership manually and lift the restriction on \(m.wxid). Please reply to \(m.email).
+        WHAT I AM ASKING FOR
+        1. Please verify ownership manually and lift the restriction on \(f.wxid).
+        2. Please send the verification code to \(f.cc) \(f.phone).
+        3. Please reply to \(f.email).
 
         Sincerely,
-        WeChat ID \(m.wxid)
+        \(f.realName)
+        WeChat ID \(f.wxid)
+        """
+    }
+
+    private func mailText() -> String {
+        """
+        Dear WeChat Support,
+
+        Thank you for your reply. Please find my answers below, numbered as in your email.
+
+        1. Reason for appeal: appeal for a restricted account; the self-unblock flow came to a stop at friend verification.
+        2. WeChat ID: \(f.wxid)
+        3. Mobile number that can receive SMS now: \(f.cc) \(f.phone)
+        4. Full name: \(f.realName)
+        5. Current linked mobile number: \(f.cc) \(f.phone)
+        6. Other numbers previously linked: \(f.prevPhones.isEmpty ? "None." : f.prevPhones)
+        7. Linked email address: \(f.email)
+        8. Linked to Facebook: \(f.facebook)
+        9. Locations where I use WeChat frequently: \(f.location)
+        10. Latest login device and model: \(f.device), iOS \(f.ios)
+        11. Registration date: \(f.regDate)
+        12. WeChat app language: \(f.lang)
+        13. Last friend deletion: \(f.delFriend.isEmpty ? "None recently." : f.delFriend)
+        14. Features used lately: \(f.features.isEmpty ? "Chats, Moments, WeChat Pay." : f.features)
+
+        Additional notes:
+        - The account is registered with \(f.region) as the region because I registered it while travelling there. I live in \(f.location) and use my local \(f.cc) number.
+        - No friend is available on my side to complete the friend verification, which is why the automated flow stops.
+
+        Sincerely,
+        \(f.realName)
+        WeChat ID \(f.wxid)
         """
     }
 }
 
-// MARK: - 选图
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var cfg = PHPickerConfiguration()
-        cfg.filter = .images
-        cfg.selectionLimit = 1
-        let vc = PHPickerViewController(configuration: cfg)
-        vc.delegate = context.coordinator
-        return vc
-    }
-    func updateUIViewController(_ vc: PHPickerViewController, context: Context) {}
-    func makeCoordinator() -> Coord { Coord(self) }
-    final class Coord: NSObject, PHPickerViewControllerDelegate {
-        private let p: ImagePicker
-        init(_ p: ImagePicker) { self.p = p }
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-            guard let item = results.first?.itemProvider, item.canLoadObject(ofClass: UIImage.self) else { return }
-            item.loadObject(ofClass: UIImage.self) { img, _ in
-                DispatchQueue.main.async { self.p.image = img as? UIImage }
-            }
-        }
-    }
-}
-
-// MARK: - 自动填入
+// MARK: - 官网 + 自动填
 
 struct WebFill: View {
     let side: Side
@@ -549,7 +462,9 @@ struct WebBox: UIViewRepresentable {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
         let ucc = WKUserContentController()
-        ucc.addUserScript(WKUserScript(source: Self.js(payload), injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+        ucc.addUserScript(WKUserScript(source: WebBox.js(payload),
+                                       injectionTime: .atDocumentEnd,
+                                       forMainFrameOnly: false))
         cfg.userContentController = ucc
         let wv = WKWebView(frame: .zero, configuration: cfg)
         wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Mobile/15E148 Safari/604.1"
@@ -560,85 +475,61 @@ struct WebBox: UIViewRepresentable {
     func updateUIView(_ v: WKWebView, context: Context) {}
 
     static func js(_ json: String) -> String {
-        """
-        (function(){
-          var D = \(json);
-          function setVal(el,v){
-            if(!el||v===undefined)return;
-            var tag=el.tagName;
-            var proto = tag==='TEXTAREA'?HTMLTextAreaElement.prototype : tag==='SELECT'?HTMLSelectElement.prototype : HTMLInputElement.prototype;
-            var d = Object.getOwnPropertyDescriptor(proto,'value');
-            try{ d.set.call(el,v); }catch(e){ el.value=v; }
-            ['input','change','keyup','blur'].forEach(function(t){ el.dispatchEvent(new Event(t,{bubbles:true})); });
-          }
-          function lab(el){
-            var s=[el.name,el.id,el.placeholder,el.getAttribute('aria-label')].filter(Boolean).join(' ');
-            var l=el.closest('label'); if(l) s+=' '+l.textContent;
-            var w=el.closest('div,li,tr,section,fieldset,form'); if(w&&w.textContent) s+=' '+w.textContent.slice(0,220);
-            return s.toLowerCase();
-          }
-          function choose(sel,re){
-            if(!sel||!sel.options) return false;
-            for(var i=0;i<sel.options.length;i++){
-              var txt=(sel.options[i].text||'').trim();
-              if(re.test(txt.toLowerCase())){ setVal(sel, sel.options[i].value); return true; }
-            }
-            return false;
-          }
-          var hit={p:0,r:0,c:0,d:0,w:0,e:0,k:0};
-          function fill(){
-            var ins=[].slice.call(document.querySelectorAll('input,textarea')).filter(function(e){
-              return e.offsetParent!==null && e.type!=='hidden' && e.type!=='file';
-            });
-            ins.forEach(function(el){
-              var k=lab(el);
-              if(/e-?mail|邮箱/.test(k)){ setVal(el,D.email); hit.e++; return; }
-              if(/wechat\s*id|wxid|account id|微信号/.test(k)){ setVal(el,D.wxid); hit.w++; return; }
-              if(el.tagName==='TEXTAREA' && /descript|detail|content|message|问题|描述|说明|申诉/.test(k)){ setVal(el,D.content); hit.d++; return; }
-              if(/region|地区|国家/.test(k)){ setVal(el,D.region); hit.r++; return; }
-            });
-
-            var sels=[].slice.call(document.querySelectorAll('select'));
-            sels.forEach(function(s){
-              var k=lab(s);
-              if(/platform|平台|系统/.test(k)){ if(choose(s,/ios|iphone/i)) hit.p++; return; }
-              if(/contact|联系/.test(k)){ if(choose(s,/email|邮件/i)) hit.k++; return; }
-              if(/categor|分类|问题类型/.test(k)){ if(choose(s,/account security|账号安全|account/i)) hit.c++; return; }
-              if(/region|地区|国家/.test(k)){ if(choose(s,/myanmar|taiwan|china|other|其它/i)) hit.r++; return; }
-            });
-
-            // 分类二级联动
-            setTimeout(function(){
-              [].slice.call(document.querySelectorAll('select')).forEach(function(s){
-                if(/categor|分类|问题类型/.test(lab(s))) choose(s,/account blocked|blocked|封禁|账号被封/i);
-              });
-            },900);
-
-            // 描述兜底：最大文本框
-            if(!hit.d){
-              var ta=[].slice.call(document.querySelectorAll('textarea'))
-                .filter(function(e){return e.offsetParent!==null;})
-                .sort(function(a,b){return (b.rows*b.cols)-(a.rows*a.cols);})[0];
-              if(ta){ setVal(ta,D.content); hit.d++; }
-            }
-
-            // 文件框：高亮提示手动选
-            [].slice.call(document.querySelectorAll('input[type=file]')).forEach(function(f){
-              f.style.outline='3px solid #ed3833';
-              f.style.outlineOffset='2px';
-            });
-
-            var bar=document.createElement('div');
-            bar.textContent='已填 '+((hit.p?1:0)+(hit.r?1:0)+(hit.c?1:0)+(hit.d?1:0)+(hit.w?1:0)+(hit.e?1:0)+(hit.k?1:0))+
-              ' 项 · 截图请自己点红框选一张 · 核对后点提交';
-            bar.style.cssText='position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;background:#ed3833;color:#fff;padding:12px;border-radius:12px;font:14px -apple-system;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)';
-            document.body.appendChild(bar);
-            setTimeout(function(){bar.remove();},6000);
-          }
-          setTimeout(fill,1200);
-          setTimeout(fill,3000);
-          setTimeout(fill,5000);
-        })();
-        """
+        let head = "(function(){var D=" + json + ";"
+        return head + body
     }
+
+    private static let body = """
+    function setVal(el,v){
+      if(!el||v===undefined)return;
+      var tag=el.tagName;
+      var proto=tag==='TEXTAREA'?HTMLTextAreaElement.prototype:(tag==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype);
+      var d=Object.getOwnPropertyDescriptor(proto,'value');
+      try{d.set.call(el,v);}catch(e){el.value=v;}
+      ['input','change','keyup','blur'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});
+    }
+    function lab(el){
+      var s=[el.name,el.id,el.placeholder,el.getAttribute('aria-label')].filter(Boolean).join(' ');
+      var l=el.closest('label'); if(l) s+=' '+l.textContent;
+      var w=el.closest('div,li,tr,section,fieldset,form'); if(w&&w.textContent) s+=' '+w.textContent.slice(0,200);
+      return s.toLowerCase();
+    }
+    function choose(sel,re){
+      if(!sel||!sel.options)return false;
+      for(var i=0;i<sel.options.length;i++){
+        var t=(sel.options[i].text||'').toLowerCase();
+        if(re.test(t)){setVal(sel,sel.options[i].value);return true;}
+      }
+      return false;
+    }
+    function fill(){
+      var ins=[].slice.call(document.querySelectorAll('input,textarea')).filter(function(e){
+        return e.offsetParent!==null&&e.type!=='hidden'&&e.type!=='file';
+      });
+      ins.forEach(function(el){
+        var k=lab(el);
+        if(/e-?mail/.test(k)){setVal(el,D.email);return;}
+        if(/wechat\\s*id|wxid|account id/.test(k)){setVal(el,D.wxid);return;}
+        if(el.tagName==='TEXTAREA'){setVal(el,D.content);return;}
+      });
+      [].slice.call(document.querySelectorAll('select')).forEach(function(s){
+        var k=lab(s);
+        if(/platform/.test(k)){choose(s,/ios|iphone/);return;}
+        if(/contact/.test(k)){choose(s,/email/);return;}
+        if(/categor/.test(k)){choose(s,/account security|account/);return;}
+      });
+      if(typeof D.wxid==='undefined'){D.wxid='';}
+      [].slice.call(document.querySelectorAll('input[type=file]')).forEach(function(f){
+        f.style.outline='3px solid #ed3833';
+      });
+      var bar=document.createElement('div');
+      bar.textContent='已自动填好 · 截图点红框选一张 · 核对后提交';
+      bar.style.cssText='position:fixed;left:12px;right:12px;bottom:18px;z-index:99999;background:#ed3833;color:#fff;padding:12px;border-radius:12px;font:14px -apple-system;text-align:center';
+      document.body.appendChild(bar);
+      setTimeout(function(){bar.remove();},6000);
+    }
+    setTimeout(fill,1200);
+    setTimeout(fill,3200);
+    })();
+    """
 }
