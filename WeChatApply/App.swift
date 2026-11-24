@@ -94,7 +94,7 @@ struct RootView: View {
         }
         .sheet(isPresented: $showWeb) {
             WebFill(side: m.side ?? .intl, url: (m.side ?? .intl).url,
-                    email: m.email, subject: subject(), content: body())
+                    email: m.email, subject: subject(), content: contentText())
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.6)) { appeared = true }
@@ -372,7 +372,7 @@ struct RootView: View {
             : "Appeal: \(m.wxid) — login restriction, manual verification requested"
     }
 
-    private func body() -> String {
+    private func contentText() -> String {
         if m.side == .cn {
             return """
             微信安全中心：
