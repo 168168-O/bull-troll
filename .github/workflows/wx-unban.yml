@@ -18,42 +18,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Unban.tipa
+      - name: Build 达K解围.tipa
         run: |
           set -euo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          APP="u/Payload/Unban.app"
+          APP="u/Payload/DaK.app"
           rm -rf u && mkdir -p "$APP"
           xcrun --sdk iphoneos swiftc -parse-as-library -target arm64-apple-ios15.0 -sdk "$SDK" -O \
-            -module-name Unban \
+            -module-name DaK \
             -framework SwiftUI -framework UIKit -framework WebKit -framework AVFoundation -framework PhotosUI -framework Foundation \
-            WeChatApply/App.swift -o "$APP/Unban"
+            WeChatApply/App.swift WeChatTool/Log.swift WeChatTool/Bridge.swift WeChatTool/EnvCheck.swift WeChatTool/Spoofer.swift WeChatTool/Cleaner.swift \
+            -o "$APP/DaK"
           cp Assets/Info.plist "$APP/Info.plist"
           cp Assets/Icons/*.png "$APP/"
           cp Assets/logo.png "$APP/logo.png"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Unban" "$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.168168.bulltroll.unban" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable DaK" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.168168.bulltroll.dak" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleName 达K解围" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 达K解围" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.0.${{ github.run_number }}" "$APP/Info.plist"
           printf 'APPL????' > "$APP/PkgInfo"
-          codesign --force --sign - "$APP"
-          cd u && zip -qry Unban.tipa Payload && cd ..
-          ls -lh u/Unban.tipa
+          codesign --force --sign - --entitlements WeChatApply/ent.plist "$APP"
+          cd u && zip -qry DaK.tipa Payload && cd ..
+          ls -lh u/DaK.tipa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: unban-tipa
-          path: u/Unban.tipa
+          name: dak-tipa
+          path: u/DaK.tipa
           if-no-files-found: error
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: unban-v1.0.${{ github.run_number }}
-          name: 牛头解封 v1.0.${{ github.run_number }}
+          tag_name: dak-v1.0.${{ github.run_number }}
+          name: 达K解围 v1.0.${{ github.run_number }}
           body: |
-            牛头视觉的解封申请 App（arm64 / iOS 15+）。
-            三屏：选中国/国外 → 填三格 → 生成并自动填入官网。
-          files: u/Unban.tipa
+            一个包四个页签：申请 / 模板 / 工具 / 话术。
+            申请页带自动填入，工具页带清指纹与区域伪装（已签 platform-application）。
+          files: u/DaK.tipa
           fail_on_unmatched_files: true
